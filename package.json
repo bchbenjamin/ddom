@@ -1,0 +1,27 @@
+{
+  "name": "wemakedevs",
+  "version": "1.0.0",
+  "description": "Converts a 2D reference screenshot into a structured scene specification (`scene_spec.json`), procedurally generates a grounded 3D scene in Blender, renders it with Cycles, and optionally applies a 1-shot corrective refinement.",
+  "main": "index.js",
+  "directories": {
+    "example": "examples"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bchbenjamin/ddom.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/bchbenjamin/ddom/issues"
+  },
+  "homepage": "https://github.com/bchbenjamin/ddom#readme",
+  "dependencies": {
+    "puppeteer-core": "^25.11.0"
+  }
+}
