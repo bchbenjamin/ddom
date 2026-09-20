@@ -2,10 +2,10 @@
 
 Usage:
     # Single website analysis
-    python run_ddom_cli.py https://example.com
+    python run_ddom_cli.py https://your-site.example
 
     # Fidelity verification (source vs clone)
-    python run_ddom_cli.py https://example.com --clone https://my-clone.vercel.app
+    python run_ddom_cli.py https://your-site.example --clone https://your-clone.example
 """
 
 import os
@@ -73,7 +73,7 @@ def run_ddom_pipeline(source: str, clone: str = None, output_dir: str = "output"
 
 def main():
     parser = argparse.ArgumentParser(description="D-DOM Extraction and Fidelity Verification CLI")
-    parser.add_argument("source", help="Website URL (e.g. https://example.com) or local image file path")
+    parser.add_argument("source", help="Website URL (e.g. https://your-site.example) or local image file path")
     parser.add_argument("--clone", default=None, help="Generated / Clone Website URL for Fidelity Verification")
     parser.add_argument("--output-dir", default="output", help="Output directory for artifacts")
 

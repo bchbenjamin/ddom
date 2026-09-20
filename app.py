@@ -24,6 +24,10 @@ import streamlit.components.v1 as components
 from ddom_engine import extract_url, generate_design_md, generate_agent_prompt, verify_fidelity, normalize_ddom
 
 
+OUTPUT_DIR = os.getenv("DDOM_OUTPUT_DIR", "output")
+source_href = st.session_state.get("active_url") or "#"
+
+
 def _display_model(ddom):
     """Flatten canonical D-DOM facts into the compact shape the Studio renders."""
     ddom = normalize_ddom(ddom)
@@ -332,14 +336,14 @@ div[style*="background-color: #080808"] {
 # -------------------------------------------------------------
 # TOP NAVIGATION
 # -------------------------------------------------------------
-st.markdown("""
+st.markdown(f"""
 <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0 32px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.07); margin-bottom: 40px;">
     <div style="display: flex; align-items: center; gap: 14px;">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <polygon points="12,2 22,20 2,20" fill="#8052ff" />
             <polygon points="12,8 18,18 6,18" fill="#15846e" />
         </svg>
-        <span style="font-size: 22px; font-weight: 600; color: #ffffff; letter-spacing: -0.5px;">D-DOM</span>
+        <a href="{source_href}" target="_blank" rel="noopener noreferrer" style="font-size: 22px; font-weight: 600; color: #ffffff; letter-spacing: -0.5px; text-decoration: none;">D-DOM</a>
         <span class="ddom-tag" style="margin-bottom: 0; margin-left: 8px;">STUDIO</span>
     </div>
     <div style="display: flex; gap: 32px; align-items: center;">
@@ -444,18 +448,19 @@ with hero_col2:
 # -------------------------------------------------------------
 # ANALYZER INPUT BAR
 # -------------------------------------------------------------
-input_col, btn_col = st.columns([3.5, 1], gap="medium")
+with st.form("analyze_form", clear_on_submit=False):
+    input_col, btn_col = st.columns([3.5, 1], gap="medium")
 
-with input_col:
-    url_input = st.text_input(
-        "Website URL to Analyze",
-        value="https://example.com",
-        placeholder="https://example.com or any web URL",
-        label_visibility="collapsed"
-    )
+    with input_col:
+        url_input = st.text_input(
+            "Website URL to Analyze",
+            value=st.session_state.get("active_url", ""),
+            placeholder="https://your-site.example",
+            label_visibility="collapsed"
+        )
 
-with btn_col:
-    analyze_clicked = st.button("Analyze D-DOM", type="primary")
+    with btn_col:
+        analyze_clicked = st.form_submit_button("Analyze D-DOM", type="primary")
 
 # Initialize session state for analysis results
 if "ddom_data" not in st.session_state:
@@ -483,7 +488,7 @@ if analyze_clicked and url_input:
         time.sleep(0.3)
 
         status_widget.write("✦ [Stage 5/6] Building evidence-tagged D-DOM object model...")
-        output_path = os.path.join("output", "extracted_ddom.json")
+        output_path = os.path.join(OUTPUT_DIR, "extracted_ddom.json")
         ddom_result = extract_url(url_input, output_path=output_path)
 
         status_widget.write("✦ [Stage 6/6] Generating design context & AI agent prompt...")
@@ -501,6 +506,8 @@ if analyze_clicked and url_input:
 # -------------------------------------------------------------
 if st.session_state.ddom_data:
     ddom = normalize_ddom(st.session_state.ddom_data)
+    design_md_content = generate_design_md(ddom)
+    agent_prompt_content = generate_agent_prompt(ddom)
     display = _display_model(ddom)
     meta = display.get("meta", {})
     quality = display.get("quality", {})
@@ -519,8 +526,15 @@ if st.session_state.ddom_data:
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown('<span class="ddom-tag">WORKSPACE</span>', unsafe_allow_html=True)
-    st.markdown(f'<h2 class="ddom-heading">{meta.get("title", "Interface Analysis")}</h2>', unsafe_allow_html=True)
+    source_url = meta.get("url") or st.session_state.get("active_url") or "#"
+    st.markdown(f'<h2 class="ddom-heading"><a href="{source_url}" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;">{meta.get("title", "Interface Analysis")}</a></h2>', unsafe_allow_html=True)
     st.markdown(f'<p class="ddom-body" style="font-size: 15px;">Source: <code style="color: #ffb829; background: #111; padding: 2px 8px; border-radius: 8px;">{meta.get("url")}</code> — Extracted: {meta.get("timestamp")}</p>', unsafe_allow_html=True)
+    st.download_button(
+        label="Download Markdown",
+        data=design_md_content,
+        file_name="D-DOM.md",
+        mime="text/markdown",
+    )
 
     # Metric Row
     m1, m2, m3, m4 = st.columns(4)
@@ -694,15 +708,6 @@ if st.session_state.ddom_data:
     # ---------------- TAB 4: DESIGN.MD ----------------
     with tabs[3]:
         st.markdown("<br>", unsafe_allow_html=True)
-        design_md_content = generate_design_md(ddom)
-        d_btn_col, _ = st.columns([1, 3])
-        with d_btn_col:
-            st.download_button(
-                label="Download DESIGN.md",
-                data=design_md_content,
-                file_name="DESIGN.md",
-                mime="text/markdown",
-            )
         st.markdown(design_md_content)
 
     # ---------------- TAB 5: AGENT PROMPT ----------------
@@ -711,7 +716,6 @@ if st.session_state.ddom_data:
         st.markdown('<span class="ddom-tag">HANDOFF LAYER</span>', unsafe_allow_html=True)
         st.markdown('<h3 class="ddom-subheading">AI Coding Agent Blueprint</h3>', unsafe_allow_html=True)
         st.markdown("<p class=\"ddom-body\">Pass this measured specification directly to your AI coding agent (Claude, Cursor, Copilot) to generate a pixel-accurate implementation without guessing.</p>", unsafe_allow_html=True)
-        agent_prompt_content = generate_agent_prompt(ddom)
         st.code(agent_prompt_content, language="markdown")
 
     # ---------------- TAB 6: D-DOM JSON ----------------
@@ -736,9 +740,9 @@ if st.session_state.ddom_data:
 
         fc1, fc2 = st.columns(2, gap="medium")
         with fc1:
-            src_url_val = st.text_input("Source Website URL", value=st.session_state.active_url or "https://example.com")
+            src_url_val = st.text_input("Source Website URL", value=st.session_state.active_url or "", placeholder="https://source-site.example")
         with fc2:
-            clone_url_val = st.text_input("Clone / Implementation URL", value="https://example.com", placeholder="https://myclone.vercel.app")
+            clone_url_val = st.text_input("Clone / Implementation URL", value="", placeholder="https://your-clone.example")
 
         verify_btn = st.button("Run Fidelity Comparison", type="primary")
 

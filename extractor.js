@@ -559,7 +559,11 @@ function buildDDomFromRaw(url, raw, mobileLayout) {
 // CLI execution if run directly
 if (require.main === module) {
   const args = process.argv.slice(2);
-  const targetUrl = args[0] || 'https://example.com';
+  const targetUrl = args[0];
+  if (!targetUrl) {
+    console.error('Usage: node extractor.js <url> [outputPath] [screenshotPath]');
+    process.exit(1);
+  }
   const outPath = args[1] || 'output/ddom.json';
 
   extractDDom(targetUrl, outPath)

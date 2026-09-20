@@ -1,8 +1,8 @@
 """D-DOM CLI Command Line Orchestrator.
 
 Usage:
-  python run_ddom.py https://example.com
-  python run_ddom.py --source https://example.com --clone https://iana.org
+    python run_ddom.py <url>
+    python run_ddom.py --source <source_url> --clone <clone_url>
 """
 
 import sys
@@ -59,7 +59,9 @@ def main():
         print(f"\nReport saved to: {rep_path}")
         return
 
-    target_url = args.url or "https://example.com"
+    if not args.url:
+        parser.error("A target URL is required.")
+    target_url = args.url
     print("=" * 65)
     print("D-DOM EXTRACTION STUDIO")
     print("=" * 65)

@@ -38,7 +38,8 @@ def extract_url(url: str, output_path: Optional[str] = None, screenshot_path: Op
     url = _normalize_and_validate_url(url)
     current_dir = os.path.dirname(os.path.abspath(__file__))
     extractor_script = os.path.join(current_dir, "extractor.js")
-    temp_output = output_path or os.path.join(current_dir, "output", "temp_ddom.json")
+    default_output_dir = os.getenv("DDOM_OUTPUT_DIR", os.path.join(current_dir, "output"))
+    temp_output = output_path or os.path.join(default_output_dir, "temp_ddom.json")
     os.makedirs(os.path.dirname(temp_output), exist_ok=True)
 
     cmd = ["node", extractor_script, url, temp_output]
@@ -266,10 +267,23 @@ def generate_design_md(ddom: Dict[str, Any]) -> str:
     source = ddom["source"]
     tokens = ddom["tokens"]
     quality = ddom["quality"]
+    source_url = source.get("url") or ""
+    source_link = f"[{source_url}]({source_url})" if source_url else "unknown"
     lines = [
-        f"# {source.get('url') or 'Interface'} - D-DOM Design Reference",
+        "# D-DOM Design Reference",
         "",
-        f"> Captured {source.get('capturedAt')} from `{source.get('url')}`. Values are evidence-tagged as source, runtime, visual, or inferred.",
+        f"> Captured {source.get('capturedAt')} from {source_link}. Values are evidence-tagged as source, runtime, visual, or inferred.",
+        "",
+        "## Source",
+        f"- Kind: `{source.get('kind', 'website')}`",
+        f"- URL: {source_link}",
+        f"- Captured at: `{source.get('capturedAt')}`",
+        "- Viewports: " + (
+            ", ".join(
+                f"`{viewport.get('name', 'viewport')}` {viewport.get('width')}x{viewport.get('height')}"
+                for viewport in source.get("viewports", [])
+            ) or "none recorded"
+        ),
         "",
         "## Quality",
         f"- Overall: `{quality['overall']:.2f}`",
@@ -280,37 +294,75 @@ def generate_design_md(ddom: Dict[str, Any]) -> str:
         "| Role | Hex | Usage | Evidence | Confidence |",
         "| :--- | :--- | ---: | :--- | ---: |",
     ]
-    for c in tokens["colors"][:12]:
+    for c in tokens["colors"]:
         value = c["value"]
         lines.append(f"| {value.get('role') or 'custom'} | `{value.get('hex')}` | {value.get('usageCount', 1)} | {c['evidence'].lower()} | {c['confidence']:.2f} |")
     lines.extend(["", "## Typography", "| Role | Family | Weight | Size | Line Height | Evidence |", "| :--- | :--- | ---: | ---: | :--- | :--- |"])
-    for t in tokens["typography"][:10]:
+    for t in tokens["typography"]:
         v = t["value"]
         lines.append(f"| {v.get('role', 'text')} | {v.get('family')} | {v.get('weight')} | {v.get('sizePx')}px | {v.get('lineHeight')} | {t['evidence'].lower()} |")
     lines.extend(["", "## Spacing, Radii, Shadows"])
-    lines.append("- Spacing scale: " + (", ".join(f"`{s['value']}px` ({s['evidence'].lower()})" for s in tokens["spacing"][:12]) or "none detected"))
-    lines.append("- Radii: " + (", ".join(f"`{r['value']}px` ({r['evidence'].lower()})" for r in tokens["radii"][:8]) or "`0px` inferred"))
-    lines.append("- Shadows: " + (", ".join(f"`{s['value']}` ({s['evidence'].lower()})" for s in tokens["shadows"][:4]) or "none detected"))
+    lines.append("- Spacing scale: " + (", ".join(f"`{s['value']}px` ({s['evidence'].lower()}, {s['confidence']:.2f})" for s in tokens["spacing"]) or "none detected"))
+    lines.append("- Radii: " + (", ".join(f"`{r['value']}px` ({r['evidence'].lower()}, {r['confidence']:.2f})" for r in tokens["radii"]) or "`0px` inferred"))
+    lines.append("- Shadows: " + (", ".join(f"`{s['value']}` ({s['evidence'].lower()}, {s['confidence']:.2f})" for s in tokens["shadows"]) or "none detected"))
+    if tokens["borders"]:
+        lines.extend(["", "## Borders", "| Width | Style | Color | Evidence | Confidence |", "| ---: | :--- | :--- | :--- | ---: |"])
+        for b in tokens["borders"]:
+            v = b["value"]
+            lines.append(f"| {v.get('widthPx')}px | {v.get('style')} | `{v.get('color')}` | {b['evidence'].lower()} | {b['confidence']:.2f} |")
     lines.extend(["", "## Structure"])
-    for region in ddom["structure"].get("regions", [])[:8]:
+    for region in ddom["structure"].get("regions", []):
         lines.append(f"- Region `{region['value'].get('role')}` at `{region['value'].get('selector')}` ({region['evidence'].lower()})")
-    for comp in ddom["structure"].get("components", [])[:12]:
+    for comp in ddom["structure"].get("components", []):
         lines.append(f"- Component `{comp['kind']}` x{comp['occurrences']} exemplar `{comp['exemplarSelector']}`")
+        for name, wrapped in comp.get("styles", {}).items():
+            lines.append(f"  - `{name}`: `{wrapped.get('value')}` ({wrapped.get('evidence', '').lower()}, {wrapped.get('confidence', 0):.2f})")
     lines.extend(["", "## Motion"])
     if ddom["motion"]:
-        for m in ddom["motion"][:8]:
+        for m in ddom["motion"]:
             lines.append(f"- `{m['trigger']}` on `{m['target']}`: {m['durationMs']['value']}ms, {m['easing']['value']} via {m['mechanism']['value']} ({m['mechanism']['evidence'].lower()})")
+            if m.get("from"):
+                lines.append(f"  - from: `{json.dumps(m['from'], ensure_ascii=False)}`")
+            if m.get("to"):
+                lines.append(f"  - to: `{json.dumps(m['to'], ensure_ascii=False)}`")
     else:
         lines.append("- No measurable motion records detected.")
+    lines.extend(["", "## Interactions"])
+    if ddom["interactions"]:
+        for interaction in ddom["interactions"]:
+            lines.append(f"- `{interaction['state']}` on `{interaction['target']}` ({interaction['evidence'].lower()}, {interaction['confidence']:.2f})")
+            lines.append(f"  - delta: `{json.dumps(interaction.get('styleDelta', {}), ensure_ascii=False)}`")
+    else:
+        lines.append("- No interaction state deltas detected.")
     lines.extend(["", "## Responsive"])
-    for bp in ddom["responsive"].get("breakpoints", [])[:8]:
+    for bp in ddom["responsive"].get("breakpoints", []):
         lines.append(f"- Breakpoint `{bp['value']}px` ({bp['evidence'].lower()})")
-    for change in ddom["responsive"].get("changes", [])[:8]:
+    for change in ddom["responsive"].get("changes", []):
         lines.append(f"- At `{change['at']}px`, `{change['selector']}`: {change['kind']} - {change['detail']}")
+    lines.extend(["", "## Icons"])
+    if ddom["icons"]:
+        for icon in ddom["icons"]:
+            lines.append(f"- `{icon['id']}`: {icon['format']} x{icon['occurrences']}, family `{icon['family']['value']}`, size `{icon['sizePx']['value']}px` ({icon['family']['evidence'].lower()})")
+            if icon.get("viewBox"):
+                lines.append(f"  - viewBox: `{icon['viewBox']}`")
+            if icon.get("stroke"):
+                lines.append(f"  - stroke: `{json.dumps(icon['stroke'], ensure_ascii=False)}`")
+    else:
+        lines.append("- No SVG or icon-font records detected.")
     lines.extend(["", "## Implementation Rules", "- Prefer measured values over aesthetic guesses.", "- Treat inferred values as lower-confidence hints.", "- Re-run `verify_clone` after implementation and fix category mismatches first."])
     if ddom.get("warnings"):
         lines.extend(["", "## Warnings"])
         lines.extend(f"- {w}" for w in ddom["warnings"])
+    lines.extend([
+        "",
+        "## Complete D-DOM JSON",
+        "",
+        "This appendix is intentionally complete so coding agents can use every fact the extractor found.",
+        "",
+        "```json",
+        json.dumps(ddom, indent=2, ensure_ascii=False),
+        "```",
+    ])
     return "\n".join(lines)
 
 

@@ -107,7 +107,7 @@ Launch the Streamlit web interface designed according to the `Dala` design syste
 streamlit run app.py
 ```
 
-* Open your browser at `http://localhost:8501`.
+* Open your browser at the deployed AWS endpoint or `http://127.0.0.1:8501` for local testing.
 * Upload any screenshot or pick an included benchmark scene.
 * Configure render sample rates and 1-shot refinement toggle.
 * Click **Generate Blender Scene**.
